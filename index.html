@@ -1,0 +1,1501 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>vocab.headtilt - Filter Kuis Kosakata Bahasa Inggris AR</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <!-- MediaPipe FaceMesh untuk Deteksi Kemiringan Kepala Akurat -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+        }
+
+        body {
+            background: radial-gradient(circle at 50% 20%, #171936 0%, #090a14 75%);
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            color: #ffffff;
+        }
+
+        /* Bingkai Ponsel seperti di Gambar Referensi */
+        .phone-frame {
+            position: relative;
+            width: 100%;
+            max-width: 425px;
+            height: 94vh;
+            max-height: 870px;
+            background: #121524;
+            border-radius: 46px;
+            border: 10px solid #222638;
+            box-shadow: 
+                0 25px 70px rgba(0, 0, 0, 0.85),
+                0 0 0 2px #0f111c,
+                inset 0 0 25px rgba(0, 0, 0, 0.7);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        @media (max-width: 450px) {
+            .phone-frame {
+                max-width: 100vw;
+                height: 100vh;
+                max-height: 100vh;
+                border-radius: 0;
+                border: none;
+            }
+        }
+
+        /* Glassmorphism Styles */
+        .glass-dark {
+            background: rgba(24, 28, 44, 0.78);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.14);
+        }
+
+        .glass-modal {
+            background: linear-gradient(180deg, rgba(31, 36, 56, 0.96) 0%, rgba(19, 22, 35, 0.98) 100%);
+            backdrop-filter: blur(22px);
+            -webkit-backdrop-filter: blur(22px);
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            box-shadow: 0 20px 55px rgba(0, 0, 0, 0.8);
+        }
+
+        .glass-dock {
+            background: rgba(21, 24, 38, 0.92);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.65);
+        }
+
+        /* Tombol Jawaban Benar & Salah Glassmorphism */
+        .btn-benar {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.35) 0%, rgba(5, 150, 105, 0.68) 100%);
+            backdrop-filter: blur(12px);
+            border: 1.5px solid rgba(52, 211, 153, 0.55);
+            box-shadow: 0 8px 25px rgba(16, 185, 129, 0.25), inset 0 1px 1px rgba(255,255,255,0.3);
+            transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .btn-benar.active-tilt, .btn-benar:active {
+            transform: scale(1.06);
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.85) 0%, rgba(5, 150, 105, 0.95) 100%);
+            border-color: #6ee7b7;
+            box-shadow: 0 0 30px rgba(16, 185, 129, 0.75);
+        }
+
+        .btn-salah {
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.35) 0%, rgba(185, 28, 28, 0.68) 100%);
+            backdrop-filter: blur(12px);
+            border: 1.5px solid rgba(248, 113, 113, 0.55);
+            box-shadow: 0 8px 25px rgba(239, 68, 68, 0.25), inset 0 1px 1px rgba(255,255,255,0.3);
+            transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .btn-salah.active-tilt, .btn-salah:active {
+            transform: scale(1.06);
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.85) 0%, rgba(185, 28, 28, 0.95) 100%);
+            border-color: #fca5a5;
+            box-shadow: 0 0 30px rgba(239, 68, 68, 0.75);
+        }
+
+        /* Kartu Kuis AR di Dahi */
+        .forehead-card {
+            background: linear-gradient(180deg, #fffbeb 0%, #fef3c7 100%);
+            border: 4px solid #f59e0b;
+            box-shadow: 
+                0 12px 35px rgba(0, 0, 0, 0.6),
+                0 0 25px rgba(245, 158, 11, 0.45),
+                inset 0 2px 4px rgba(255, 255, 255, 0.9);
+            transition: transform 0.08s ease-out, border-color 0.2s ease;
+            transform-origin: center bottom;
+        }
+
+        /* Sembunyikan Scrollbar untuk Bar Kategori */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        /* Pill Topik Aktif seperti di Gambar */
+        .topic-pill-active {
+            background: linear-gradient(90deg, #00e5ff 0%, #00c4b4 100%);
+            color: #062229;
+            font-weight: 800;
+            box-shadow: 0 0 18px rgba(0, 229, 255, 0.5);
+            border: 1px solid #80f2ff;
+        }
+
+        /* Pilihan Topik di dalam Modal */
+        .modal-topic-item {
+            background: rgba(35, 41, 62, 0.75);
+            border: 1.5px solid rgba(255, 255, 255, 0.12);
+            transition: all 0.2s ease;
+        }
+        .modal-topic-item.selected {
+            background: rgba(13, 92, 75, 0.65);
+            border: 1.8px solid #10b981;
+            box-shadow: 0 0 18px rgba(16, 185, 129, 0.3);
+        }
+
+        /* Animasi Getar saat Jawaban Salah */
+        @keyframes shakeError {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-8px) rotate(-3deg); }
+            40%, 80% { transform: translateX(8px) rotate(3deg); }
+        }
+        .shake-anim {
+            animation: shakeError 0.45s ease-in-out;
+        }
+
+        /* Indikator Hold Bar pada Tombol */
+        .hold-progress {
+            transition: width 0.06s linear;
+        }
+
+        /* Video Mirror */
+        .mirror-video {
+            transform: scaleX(-1);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Bingkai Utama Ponsel -->
+    <div class="phone-frame" id="appContainer">
+
+        <!-- LAYER 1: Kamera & Kanvas AR Avatar Simulasi -->
+        <div class="absolute inset-0 z-0 bg-[#101322] overflow-hidden">
+            <!-- Live Kamera WebRTC -->
+            <video id="cameraVideo" class="w-full h-full object-cover mirror-video hidden" playsinline muted></video>
+            <!-- Kanvas Interaktif (Avatar AR & Partikel Konfeti + Indikator Wajah) -->
+            <canvas id="arCanvas" class="w-full h-full block"></canvas>
+            <!-- Vignette Gelap Halus agar UI Terbaca Jelas -->
+            <div class="absolute inset-0 pointer-events-none bg-gradient-to-b from-black/60 via-transparent to-black/75"></div>
+        </div>
+
+        <!-- LAYER 2: Bagian Atas (Progress Bar 10 Segmen, Header Profil, & Bar Kategori) -->
+        <div class="relative z-20 pt-3 px-3.5 flex flex-col gap-2.5">
+            
+            <!-- Story Progress Bar (10 Segmen Soal) -->
+            <div id="storySegments" class="grid grid-cols-10 gap-1.5 w-full px-0.5">
+                <!-- Segmen di-render dinamis oleh JS -->
+            </div>
+
+            <!-- Baris Header: Badge Profil Kiri & Indikator Kanan -->
+            <div class="flex items-center justify-between gap-1.5 mt-0.5">
+                <!-- Badge Profil (Persis Referensi) -->
+                <div class="glass-dark rounded-full py-1.5 pl-2 pr-3.5 flex items-center gap-2.5 shadow-lg">
+                    <div class="w-9 h-9 rounded-full bg-gradient-to-tr from-pink-500 via-amber-400 to-cyan-400 p-0.5 flex items-center justify-center shrink-0 shadow-md">
+                        <div class="w-full h-full rounded-full bg-indigo-950/80 flex items-center justify-center text-xs font-extrabold tracking-tighter">
+                            <span class="bg-blue-500 text-white px-1 py-0.5 rounded text-[10px] leading-none">A<br>Z</span>
+                        </div>
+                    </div>
+                    <div class="leading-tight">
+                        <div class="font-extrabold text-[13.5px] tracking-tight text-white">vocab.headtilt</div>
+                        <div class="flex items-center gap-1.5 text-[11px] text-slate-300 font-medium">
+                            <span id="camStatusDot" class="w-2 h-2 rounded-full bg-slate-400 inline-block animate-pulse"></span>
+                            <span id="camStatusText" class="truncate max-w-[115px]">Meminta izin kamera...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tombol Audio, Bintang, & Streak -->
+                <div class="flex items-center gap-1.5">
+                    <!-- Tombol Suara / Pelafalan -->
+                    <button id="btnToggleSound" onclick="toggleAudio()" title="Suara & Pelafalan Bahasa Inggris" class="glass-dark w-10 h-10 rounded-full flex items-center justify-center hover:bg-white/10 active:scale-90 transition">
+                        <span id="soundIcon" class="text-base">🔊</span>
+                    </button>
+                    <!-- Skor Bintang -->
+                    <div class="glass-dark rounded-full h-10 px-3 flex items-center gap-1.5 font-extrabold text-sm">
+                        <span class="text-amber-400 text-base">⭐</span>
+                        <span id="scoreDisplay">0</span>
+                    </div>
+                    <!-- Streak Api -->
+                    <div class="glass-dark rounded-full h-10 px-3 flex items-center gap-1.5 font-extrabold text-sm">
+                        <span class="text-orange-500 text-base">🔥</span>
+                        <span id="streakDisplay">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bar Kategori Horizontal (Bisa Digeser & Diklik) -->
+            <div id="topCategoryBar" class="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5">
+                <!-- Di-render oleh JS -->
+            </div>
+        </div>
+
+        <!-- LAYER 3: Area Tengah AR (Kartu Soal di Dahi & Indikator Derajat Kemiringan) -->
+        <div class="relative z-10 flex-1 flex flex-col items-center justify-start pt-2 px-4 pointer-events-none">
+            
+            <!-- Kartu Soal AR di Dahi (Forehead Quiz Card) -->
+            <div id="foreheadCard" class="forehead-card w-full max-w-[335px] rounded-3xl p-3.5 text-slate-900 pointer-events-auto relative">
+                
+                <!-- Baris Atas Kartu: Badge Topik & Nomor Soal + Tombol Baca Suara -->
+                <div class="flex items-center justify-between mb-1.5">
+                    <span id="cardTopicBadge" class="bg-slate-900 text-amber-300 text-[10.5px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full">
+                        ANIMALS • EASY
+                    </span>
+                    <div class="flex items-center gap-1.5">
+                        <button onclick="speakCurrentWord()" title="Dengarkan Pelafalan (TTS)" class="bg-amber-200 hover:bg-amber-300 text-slate-900 w-6 h-6 rounded-full flex items-center justify-center text-xs shadow-sm active:scale-90 transition">
+                            🗣️
+                        </button>
+                        <span id="cardQuestionNum" class="text-xs font-extrabold text-slate-700">1/10</span>
+                    </div>
+                </div>
+
+                <!-- Konten Kosakata Bahasa Inggris Utama -->
+                <div class="text-center my-1">
+                    <div class="flex items-center justify-center gap-2">
+                        <span id="vocabEmoji" class="text-3xl sm:text-4xl drop-shadow">🐘</span>
+                        <div class="text-left">
+                            <h2 id="vocabWord" class="text-2xl sm:text-[26px] font-black tracking-tight text-slate-900 leading-none">
+                                ELEPHANT
+                            </h2>
+                            <p id="vocabPhonetic" class="text-xs font-semibold text-slate-600 mt-0.5">
+                                /ˈel.ɪ.fənt/ • Kata Benda
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Kotak Pertanyaan Terjemahan / Pasangan -->
+                    <div id="questionPromptBox" class="mt-2.5 bg-white/85 border border-amber-300/90 rounded-2xl py-2 px-3 shadow-inner">
+                        <div id="questionModeLabel" class="text-[10px] font-bold uppercase tracking-wider text-amber-700">
+                            Apakah artinya dalam Bahasa Indonesia:
+                        </div>
+                        <div id="questionMeaningText" class="text-lg sm:text-xl font-extrabold text-slate-900 leading-snug">
+                            "Gajah" ?
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Baris Bawah Kartu: Petunjuk Arah Miring & Sudut Kepala Real-time -->
+                <div class="flex items-center justify-between text-[11px] font-bold text-slate-700 mt-2 pt-1.5 border-t border-amber-300/70">
+                    <span id="leftHintLabel" class="text-emerald-700 flex items-center gap-1">⬅️ Kiri: BENAR</span>
+                    <span id="tiltAngleBadge" class="bg-slate-900 text-white px-2 py-0.5 rounded-full text-[10px] font-extrabold">
+                        0° Lurus
+                    </span>
+                    <span id="rightHintLabel" class="text-rose-700 flex items-center gap-1">Kanan: SALAH ➡️</span>
+                </div>
+            </div>
+
+            <!-- Feedback Pop-up Singkat Saat Menjawab Benar/Salah -->
+            <div id="answerFeedbackBanner" class="hidden mt-3 px-4 py-2 rounded-2xl font-extrabold text-sm text-center shadow-2xl border backdrop-blur-md transition-all">
+            </div>
+
+            <!-- Slider Simulasi Kemiringan Kepala (Bisa Digeser jika Tanpa Kamera / Uji Coba Cepat) -->
+            <div id="simTiltControl" class="pointer-events-auto mt-auto mb-2 w-full max-w-[290px] glass-dark rounded-2xl px-3.5 py-2 flex flex-col gap-1 opacity-90 hover:opacity-100 transition">
+                <div class="flex items-center justify-between text-[11px] font-bold text-slate-300">
+                    <span>⬅️ Miring Kiri</span>
+                    <span class="text-cyan-300">Geser / Panah ⬅️➡️</span>
+                    <span>Miring Kanan ➡️</span>
+                </div>
+                <input id="tiltSlider" type="range" min="-30" max="30" value="0" step="1" 
+                    class="w-full accent-cyan-400 cursor-pointer h-1.5 bg-slate-700 rounded-lg">
+            </div>
+        </div>
+
+        <!-- LAYER 4: Toast Mengambang, Tombol BENAR/SALAH, & Dock Bawah (Persis Gambar) -->
+        <div class="relative z-30 px-3.5 pb-3.5 flex flex-col gap-2.5">
+            
+            <!-- Toast Notifikasi Mengambang (Persis Gambar Referensi) -->
+            <div id="floatingToast" class="glass-dark rounded-2xl py-2.5 px-4 text-center shadow-xl border border-white/15 transition-all duration-300">
+                <p id="toastText" class="text-[13px] font-extrabold text-white leading-snug">
+                    Topik <span class="text-cyan-300">ANIMALS</span> siap! Soal telah diacak, miringkan kepala Kiri/Kanan!
+                </p>
+            </div>
+
+            <!-- Dua Tombol Besar Semi-Transparan: BENAR (Kiri) & SALAH (Kanan) -->
+            <div class="grid grid-cols-2 gap-3">
+                <!-- Tombol Kiri -->
+                <button id="btnLeftChoice" onclick="submitAnswer('LEFT')" class="btn-benar relative overflow-hidden rounded-2xl py-3.5 px-3 flex flex-col items-center justify-center text-white font-extrabold shadow-lg">
+                    <div class="flex items-center gap-2 text-base sm:text-lg tracking-wide">
+                        <span id="leftChoiceIcon" class="bg-emerald-400/30 border border-emerald-300 rounded-md px-1.5 py-0.5 text-sm">✅</span>
+                        <span id="leftChoiceText">BENAR</span>
+                    </div>
+                    <div id="leftHoldBar" class="hold-progress absolute bottom-0 left-0 h-1.5 bg-emerald-300 w-0"></div>
+                </button>
+
+                <!-- Tombol Kanan -->
+                <button id="btnRightChoice" onclick="submitAnswer('RIGHT')" class="btn-salah relative overflow-hidden rounded-2xl py-3.5 px-3 flex flex-col items-center justify-center text-white font-extrabold shadow-lg">
+                    <div class="flex items-center gap-2 text-base sm:text-lg tracking-wide">
+                        <span id="rightChoiceIcon" class="text-sm">❌</span>
+                        <span id="rightChoiceText">SALAH</span>
+                    </div>
+                    <div id="rightHoldBar" class="hold-progress absolute bottom-0 left-0 h-1.5 bg-rose-300 w-0"></div>
+                </button>
+            </div>
+
+            <!-- Dock Navigasi Bawah (Persis Gambar Referensi) -->
+            <div class="glass-dock rounded-[34px] py-2.5 px-4 flex items-center justify-between">
+                <!-- 1. Level & Soal -->
+                <button onclick="openTopicModal()" class="flex flex-col items-center justify-center gap-1 text-slate-200 hover:text-white active:scale-90 transition w-14">
+                    <span class="text-xl leading-none">🎛️</span>
+                    <span class="text-[11px] font-bold leading-tight text-center">Level<br>& Soal</span>
+                </button>
+
+                <!-- 2. Luruskan 0° -->
+                <button onclick="calibrateZeroAngle()" class="flex flex-col items-center justify-center gap-1 text-slate-200 hover:text-white active:scale-90 transition w-14">
+                    <span class="text-xl leading-none">⚖️</span>
+                    <span class="text-[11px] font-bold leading-tight text-center">Luruskan<br>0°</span>
+                </button>
+
+                <!-- 3. Tombol Tengah Shutter Kamera -->
+                <button id="shutterBtn" onclick="handleShutterClick()" title="Mulai / Baca Soal / Kamera" class="relative w-16 h-16 rounded-full p-1 bg-transparent border-[3px] border-white flex items-center justify-center shadow-[0_0_25px_rgba(0,229,255,0.5)] active:scale-90 transition">
+                    <div class="w-full h-full rounded-full bg-gradient-to-tr from-emerald-400 to-cyan-400 flex items-center justify-center text-2xl shadow-inner">
+                        📷
+                    </div>
+                </button>
+
+                <!-- 4. Balik Cam -->
+                <button onclick="switchCameraFacing()" class="flex flex-col items-center justify-center gap-1 text-slate-200 hover:text-white active:scale-90 transition w-14">
+                    <span class="text-xl leading-none">🔄</span>
+                    <span class="text-[11px] font-bold leading-tight text-center">Balik<br>Cam</span>
+                </button>
+
+                <!-- 5. Lewati -->
+                <button onclick="skipCurrentQuestion()" class="flex flex-col items-center justify-center gap-1 text-slate-200 hover:text-white active:scale-90 transition w-14">
+                    <span class="text-xl leading-none">⏭️</span>
+                    <span class="text-[11px] font-bold leading-tight text-center">Lewati</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- LAYER 5: MODAL PILIH TOPIK & LEVEL (Persis Gambar Referensi Saat Dibuka) -->
+        <div id="topicModalOverlay" class="absolute inset-0 z-20 bg-black/55 backdrop-blur-sm flex items-center justify-center px-4 pb-36 pt-24 transition-opacity duration-300">
+            <div class="glass-modal w-full rounded-[32px] p-5 flex flex-col items-center text-center max-h-full overflow-y-auto no-scrollbar">
+                
+                <!-- Ikon Lingkaran Gradien Ungu-Pink di Atas Modal -->
+                <div class="w-16 h-16 rounded-full bg-gradient-to-b from-fuchsia-500 via-purple-600 to-indigo-600 flex items-center justify-center text-3xl shadow-[0_0_30px_rgba(192,38,211,0.5)] mb-3 shrink-0">
+                    🤳
+                </div>
+
+                <!-- Judul & Subjudul Modal -->
+                <h1 class="text-[21px] font-extrabold text-white tracking-tight leading-snug">
+                    Filter Kuis Kosakata AR
+                </h1>
+                <p class="text-xs text-slate-300 font-medium mt-1.5 leading-relaxed max-w-[300px]">
+                    Pilih topik favoritmu! Soal diacak otomatis di dahi, miringkan kepala ke <strong class="text-white">Kiri</strong> atau <strong class="text-white">Kanan</strong> untuk menjawab.
+                </p>
+
+                <!-- Label Pilih Topik -->
+                <div class="mt-4 mb-2.5 flex items-center gap-1.5 text-[11.5px] font-extrabold tracking-wider text-amber-400 uppercase">
+                    <span>📚</span>
+                    <span>PILIH TOPIK KOSAKATA INGGRIS:</span>
+                </div>
+
+                <!-- Grid 2 Kolom Pilihan Topik -->
+                <div id="modalTopicGrid" class="grid grid-cols-2 gap-2.5 w-full text-left">
+                    <!-- Di-render dinamis oleh JS -->
+                </div>
+
+                <!-- Pengaturan Level & Mode Kuis -->
+                <div class="w-full mt-3.5 pt-3 border-t border-white/10 flex items-center justify-between gap-2">
+                    <!-- Tingkat Kesulitan -->
+                    <div class="flex items-center gap-1 bg-slate-900/90 p-1 rounded-xl border border-white/10 text-[11px] font-bold">
+                        <button onclick="setDifficulty('EASY')" id="diffBtnEasy" class="px-2.5 py-1 rounded-lg bg-emerald-500 text-slate-950 font-extrabold transition">Easy</button>
+                        <button onclick="setDifficulty('MEDIUM')" id="diffBtnMedium" class="px-2.5 py-1 rounded-lg text-slate-300 hover:text-white transition">Medium</button>
+                        <button onclick="setDifficulty('HARD')" id="diffBtnHard" class="px-2.5 py-1 rounded-lg text-slate-300 hover:text-white transition">Hard</button>
+                    </div>
+
+                    <!-- Mode Jawaban: Benar/Salah vs Pilihan A/B -->
+                    <button onclick="toggleQuizMode()" id="quizModeBtn" class="bg-slate-800/90 hover:bg-slate-700 border border-white/15 rounded-xl px-2.5 py-1.5 text-[11px] font-bold text-cyan-300 transition">
+                        Mode: ✅ Benar/Salah
+                    </button>
+                </div>
+
+                <!-- Tombol Hubungkan Kamera & Mulai -->
+                <button onclick="startWithCameraAndCloseModal()" class="mt-4 w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-400 text-slate-950 font-extrabold text-sm shadow-[0_0_25px_rgba(20,184,166,0.5)] hover:brightness-110 active:scale-95 transition flex items-center justify-center gap-2">
+                    <span>📷</span>
+                    <span id="btnStartCameraLabel">Mulai Kuis & Aktifkan Kamera</span>
+                </button>
+
+                <button onclick="closeTopicModal()" class="mt-2 text-[11.5px] font-semibold text-slate-400 hover:text-white underline">
+                    Lanjut dalam Mode Simulasi / Tutup Pop-up
+                </button>
+            </div>
+        </div>
+
+        <!-- LAYER 6: MODAL HASIL AKHIR (Setelah 10 Soal Selesai) -->
+        <div id="resultModalOverlay" class="hidden absolute inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-5">
+            <div class="glass-modal w-full rounded-[32px] p-5 flex flex-col items-center text-center max-h-[88vh] overflow-y-auto no-scrollbar">
+                <div class="w-16 h-16 rounded-full bg-gradient-to-tr from-amber-400 to-orange-500 flex items-center justify-center text-3xl shadow-lg mb-2">
+                    🏆
+                </div>
+                <h2 class="text-xl font-black text-white">Kuis Selesai!</h2>
+                <p id="resultSubtitle" class="text-xs text-slate-300 mt-1">Hebat! Berikut ringkasan kosakata Bahasa Inggris yang kamu pelajari:</p>
+
+                <!-- Kotak Statistik Skor -->
+                <div class="grid grid-cols-3 gap-2 w-full my-3.5">
+                    <div class="bg-slate-800/80 border border-white/10 rounded-2xl p-2.5">
+                        <div class="text-[10px] text-slate-400 font-bold uppercase">Skor Akhir</div>
+                        <div id="finalScoreText" class="text-xl font-black text-amber-400 mt-0.5">⭐ 100</div>
+                    </div>
+                    <div class="bg-slate-800/80 border border-white/10 rounded-2xl p-2.5">
+                        <div class="text-[10px] text-slate-400 font-bold uppercase">Benar</div>
+                        <div id="finalAccuracyText" class="text-xl font-black text-emerald-400 mt-0.5">8/10</div>
+                    </div>
+                    <div class="bg-slate-800/80 border border-white/10 rounded-2xl p-2.5">
+                        <div class="text-[10px] text-slate-400 font-bold uppercase">Streak Maks</div>
+                        <div id="finalStreakText" class="text-xl font-black text-orange-400 mt-0.5">🔥 5</div>
+                    </div>
+                </div>
+
+                <!-- Daftar Kosakata yang Dipelajari -->
+                <div class="w-full text-left text-xs font-bold text-slate-300 mb-1.5 flex items-center justify-between">
+                    <span>📖 Daftar Kosakata Ronde Ini:</span>
+                    <span class="text-[10px] text-cyan-300">Klik 🔊 untuk dengar</span>
+                </div>
+                <div id="learnedWordsList" class="w-full flex flex-col gap-1.5 max-h-48 overflow-y-auto pr-1 mb-4">
+                    <!-- Di-render dinamis -->
+                </div>
+
+                <div class="grid grid-cols-2 gap-2.5 w-full">
+                    <button onclick="openTopicModalFromResult()" class="py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white font-extrabold text-xs border border-white/15 transition">
+                        🎛️ Ganti Topik
+                    </button>
+                    <button onclick="restartRound()" class="py-3 rounded-2xl bg-gradient-to-r from-emerald-400 to-cyan-400 text-slate-950 font-extrabold text-xs shadow-lg transition">
+                        🔄 Main Lagi
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        /********************************************************************
+         * 1. DATABASE KOSAKATA BAHASA INGGRIS (6 KATEGORI LENGKAP)
+         ********************************************************************/
+        const VOCAB_CATEGORIES = [
+            {
+                id: 'animals',
+                name: 'Animals',
+                shortLabel: 'Animals',
+                indoName: 'HEWAN',
+                icon: '🐾',
+                words: [
+                    { word: 'ELEPHANT', phonetic: '/ˈel.ɪ.fənt/', type: 'Noun (Kata Benda)', meaning: 'Gajah', emoji: '🐘', level: 'EASY' },
+                    { word: 'BUTTERFLY', phonetic: '/ˈbʌt.ə.flaɪ/', type: 'Noun (Kata Benda)', meaning: 'Kupu-kupu', emoji: '🦋', level: 'EASY' },
+                    { word: 'CROCODILE', phonetic: '/ˈkrɒk.ə.daɪl/', type: 'Noun (Kata Benda)', meaning: 'Buaya', emoji: '🐊', level: 'EASY' },
+                    { word: 'GIRAFFE', phonetic: '/dʒɪˈrɑːf/', type: 'Noun (Kata Benda)', meaning: 'Jerapah', emoji: '🦒', level: 'EASY' },
+                    { word: 'DOLPHIN', phonetic: '/ˈdɒl.fɪn/', type: 'Noun (Kata Benda)', meaning: 'Lumba-lumba', emoji: '🐬', level: 'EASY' },
+                    { word: 'SQUIRREL', phonetic: '/ˈskwɪr.əl/', type: 'Noun (Kata Benda)', meaning: 'Tupai', emoji: '🐿️', level: 'MEDIUM' },
+                    { word: 'PEACOCK', phonetic: '/ˈpiː.kɒk/', type: 'Noun (Kata Benda)', meaning: 'Burung Merak', emoji: '🦚', level: 'MEDIUM' },
+                    { word: 'OCTOPUS', phonetic: '/ˈɒk.tə.pəs/', type: 'Noun (Kata Benda)', meaning: 'Gurita', emoji: '🐙', level: 'MEDIUM' },
+                    { word: 'HEDGEHOG', phonetic: '/ˈhedʒ.hɒɡ/', type: 'Noun (Kata Benda)', meaning: 'Landak Mini', emoji: '🦔', level: 'HARD' },
+                    { word: 'CHAMELEON', phonetic: '/kəˈmiː.li.ən/', type: 'Noun (Kata Benda)', meaning: 'Bunglon', emoji: '🦎', level: 'HARD' },
+                    { word: 'FLAMINGO', phonetic: '/fləˈmɪŋ.ɡəʊ/', type: 'Noun (Kata Benda)', meaning: 'Burung Flamingo', emoji: '🦩', level: 'MEDIUM' },
+                    { word: 'PENGUIN', phonetic: '/ˈpeŋ.ɡwɪn/', type: 'Noun (Kata Benda)', meaning: 'Penguin', emoji: '🐧', level: 'EASY' }
+                ]
+            },
+            {
+                id: 'food',
+                name: 'Food & Drink',
+                shortLabel: 'Food',
+                indoName: 'MAKANAN & MINUMAN',
+                icon: '🍎',
+                words: [
+                    { word: 'WATERMELON', phonetic: '/ˈwɔː.təˌmel.ən/', type: 'Noun (Kata Benda)', meaning: 'Semangka', emoji: '🍉', level: 'EASY' },
+                    { word: 'PINEAPPLE', phonetic: '/ˈpaɪnˌæp.əl/', type: 'Noun (Kata Benda)', meaning: 'Nanas', emoji: '🍍', level: 'EASY' },
+                    { word: 'STRAWBERRY', phonetic: '/ˈstrɔː.bər.i/', type: 'Noun (Kata Benda)', meaning: 'Stroberi', emoji: '🍓', level: 'EASY' },
+                    { word: 'CUCUMBER', phonetic: '/ˈkjuː.kʌm.bər/', type: 'Noun (Kata Benda)', meaning: 'Mentimun', emoji: '🥒', level: 'MEDIUM' },
+                    { word: 'AVOCADO', phonetic: '/ˌæv.əˈkɑː.dəʊ/', type: 'Noun (Kata Benda)', meaning: 'Alpukat', emoji: '🥑', level: 'EASY' },
+                    { word: 'GARLIC', phonetic: '/ˈɡɑː.lɪk/', type: 'Noun (Kata Benda)', meaning: 'Bawang Putih', emoji: '🧄', level: 'MEDIUM' },
+                    { word: 'MUSHROOM', phonetic: '/ˈmʌʃ.ruːm/', type: 'Noun (Kata Benda)', meaning: 'Jamur', emoji: '🍄', level: 'MEDIUM' },
+                    { word: 'CROISSANT', phonetic: '/ˈkwæs.ɒ̃/', type: 'Noun (Kata Benda)', meaning: 'Roti Sabit', emoji: '🥐', level: 'HARD' },
+                    { word: 'EGGPLANT', phonetic: '/ˈeɡ.plɑːnt/', type: 'Noun (Kata Benda)', meaning: 'Terong', emoji: '🍆', level: 'HARD' },
+                    { word: 'PANCAKE', phonetic: '/ˈpæn.keɪk/', type: 'Noun (Kata Benda)', meaning: 'Kue Dadar / Panekuk', emoji: '🥞', level: 'EASY' },
+                    { word: 'BROCCOLI', phonetic: '/ˈbrɒk.əl.i/', type: 'Noun (Kata Benda)', meaning: 'Brokoli', emoji: '🥦', level: 'EASY' },
+                    { word: 'BEVERAGE', phonetic: '/ˈbev.ər.ɪdʒ/', type: 'Noun (Kata Benda)', meaning: 'Minuman', emoji: '🧃', level: 'HARD' }
+                ]
+            },
+            {
+                id: 'verbs',
+                name: 'Action Verbs',
+                shortLabel: 'Verbs',
+                indoName: 'KATA KERJA',
+                icon: '🏃',
+                words: [
+                    { word: 'SWIMMING', phonetic: '/ˈswɪm.ɪŋ/', type: 'Verb (Kata Kerja)', meaning: 'Berenang', emoji: '🏊', level: 'EASY' },
+                    { word: 'WRITING', phonetic: '/ˈraɪ.tɪŋ/', type: 'Verb (Kata Kerja)', meaning: 'Menulis', emoji: '✍️', level: 'EASY' },
+                    { word: 'LAUGHING', phonetic: '/ˈlɑː.fɪŋ/', type: 'Verb (Kata Kerja)', meaning: 'Tertawa', emoji: '😂', level: 'EASY' },
+                    { word: 'CLIMBING', phonetic: '/ˈklaɪ.mɪŋ/', type: 'Verb (Kata Kerja)', meaning: 'Memanjat', emoji: '🧗', level: 'MEDIUM' },
+                    { word: 'WHISPER', phonetic: '/ˈwɪs.pər/', type: 'Verb (Kata Kerja)', meaning: 'Berbisik', emoji: '🤫', level: 'MEDIUM' },
+                    { word: 'CELEBRATE', phonetic: '/ˈsel.ə.breɪt/', type: 'Verb (Kata Kerja)', meaning: 'Merayakan', emoji: '🎉', level: 'MEDIUM' },
+                    { word: 'DISCOVER', phonetic: '/dɪˈskʌv.ər/', type: 'Verb (Kata Kerja)', meaning: 'Menemukan', emoji: '🔍', level: 'HARD' },
+                    { word: 'PROTECT', phonetic: '/prəˈtekt/', type: 'Verb (Kata Kerja)', meaning: 'Melindungi', emoji: '🛡️', level: 'MEDIUM' },
+                    { word: 'IMAGINE', phonetic: '/ɪˈmædʒ.ɪn/', type: 'Verb (Kata Kerja)', meaning: 'Membayangkan', emoji: '💭', level: 'HARD' },
+                    { word: 'LISTENING', phonetic: '/ˈlɪs.ən.ɪŋ/', type: 'Verb (Kata Kerja)', meaning: 'Mendengarkan', emoji: '🎧', level: 'EASY' },
+                    { word: 'COOKING', phonetic: '/ˈkʊk.ɪŋ/', type: 'Verb (Kata Kerja)', meaning: 'Memasak', emoji: '🍳', level: 'EASY' },
+                    { word: 'ACHIEVE', phonetic: '/əˈtʃiːv/', type: 'Verb (Kata Kerja)', meaning: 'Mencapai / Meraih', emoji: '🏅', level: 'HARD' }
+                ]
+            },
+            {
+                id: 'adjectives',
+                name: 'Adjectives',
+                shortLabel: 'Adjectives',
+                indoName: 'KATA SIFAT',
+                icon: '🎨',
+                words: [
+                    { word: 'BRAVE', phonetic: '/breɪv/', type: 'Adjective (Kata Sifat)', meaning: 'Berani', emoji: '🦁', level: 'EASY' },
+                    { word: 'CLEVER', phonetic: '/ˈklev.ər/', type: 'Adjective (Kata Sifat)', meaning: 'Cerdas / Pintar', emoji: '🧠', level: 'EASY' },
+                    { word: 'FRIENDLY', phonetic: '/ˈfrend.li/', type: 'Adjective (Kata Sifat)', meaning: 'Ramah', emoji: '🤝', level: 'EASY' },
+                    { word: 'DELICIOUS', phonetic: '/dɪˈlɪʃ.əs/', type: 'Adjective (Kata Sifat)', meaning: 'Lezat / Enak', emoji: '😋', level: 'EASY' },
+                    { word: 'GENEROUS', phonetic: '/ˈdʒen.ər.əs/', type: 'Adjective (Kata Sifat)', meaning: 'Dermawan / Murah Hati', emoji: '🎁', level: 'HARD' },
+                    { word: 'CURIOUS', phonetic: '/ˈkjʊə.ri.əs/', type: 'Adjective (Kata Sifat)', meaning: 'Penasaran / Ingin Tahu', emoji: '🧐', level: 'MEDIUM' },
+                    { word: 'EXHAUSTED', phonetic: '/ɪɡˈzɔː.stɪd/', type: 'Adjective (Kata Sifat)', meaning: 'Sangat Lelah', emoji: '🥵', level: 'HARD' },
+                    { word: 'PEACEFUL', phonetic: '/ˈpiːs.fəl/', type: 'Adjective (Kata Sifat)', meaning: 'Damai / Tenang', emoji: '🕊️', level: 'MEDIUM' },
+                    { word: 'ANCIENT', phonetic: '/ˈeɪn.ʃənt/', type: 'Adjective (Kata Sifat)', meaning: 'Kuno / Tua Sekali', emoji: '🏛️', level: 'HARD' },
+                    { word: 'BRIGHT', phonetic: '/braɪt/', type: 'Adjective (Kata Sifat)', meaning: 'Terang / Cerah', emoji: '☀️', level: 'EASY' },
+                    { word: 'POLITE', phonetic: '/pəˈlaɪt/', type: 'Adjective (Kata Sifat)', meaning: 'Sopan', emoji: '🙇', level: 'MEDIUM' },
+                    { word: 'DANGEROUS', phonetic: '/ˈdeɪn.dʒər.əs/', type: 'Adjective (Kata Sifat)', meaning: 'Berbahaya', emoji: '⚠️', level: 'MEDIUM' }
+                ]
+            },
+            {
+                id: 'objects',
+                name: 'Daily Objects',
+                shortLabel: 'Objects',
+                indoName: 'BENDA SEHARI-HARI',
+                icon: '🏠',
+                words: [
+                    { word: 'UMBRELLA', phonetic: '/ʌmˈbrel.ə/', type: 'Noun (Kata Benda)', meaning: 'Payung', emoji: '☂️', level: 'EASY' },
+                    { word: 'SCISSORS', phonetic: '/ˈsɪz.əz/', type: 'Noun (Kata Benda)', meaning: 'Gunting', emoji: '✂️', level: 'EASY' },
+                    { word: 'MIRROR', phonetic: '/ˈmɪr.ər/', type: 'Noun (Kata Benda)', meaning: 'Cermin', emoji: '🪞', level: 'EASY' },
+                    { word: 'PILLOW', phonetic: '/ˈpɪl.əʊ/', type: 'Noun (Kata Benda)', meaning: 'Bantal', emoji: '🛌', level: 'EASY' },
+                    { word: 'BACKPACK', phonetic: '/ˈbæk.pæk/', type: 'Noun (Kata Benda)', meaning: 'Tas Ransel', emoji: '🎒', level: 'EASY' },
+                    { word: 'FLASHLIGHT', phonetic: '/ˈflæʃ.laɪt/', type: 'Noun (Kata Benda)', meaning: 'Lampu Senter', emoji: '🔦', level: 'MEDIUM' },
+                    { word: 'CALENDAR', phonetic: '/ˈkæl.ən.dər/', type: 'Noun (Kata Benda)', meaning: 'Kalender', emoji: '📅', level: 'EASY' },
+                    { word: 'TELESCOPE', phonetic: '/ˈtel.ɪ.skəʊp/', type: 'Noun (Kata Benda)', meaning: 'Teropong Bintang', emoji: '🔭', level: 'MEDIUM' },
+                    { word: 'SUITCASE', phonetic: '/ˈsuːt.keɪs/', type: 'Noun (Kata Benda)', meaning: 'Koper', emoji: '🧳', level: 'MEDIUM' },
+                    { word: 'HOURGLASS', phonetic: '/ˈaʊə.ɡlɑːs/', type: 'Noun (Kata Benda)', meaning: 'Jam Pasir', emoji: '⏳', level: 'HARD' },
+                    { word: 'COMPASS', phonetic: '/ˈkʌm.pəs/', type: 'Noun (Kata Benda)', meaning: 'Kompas', emoji: '🧭', level: 'MEDIUM' },
+                    { word: 'EXTINGUISHER', phonetic: '/ɪkˈstɪŋ.ɡwɪ.ʃər/', type: 'Noun (Kata Benda)', meaning: 'Alat Pemadam Api', emoji: '🧯', level: 'HARD' }
+                ]
+            },
+            {
+                id: 'antonyms',
+                name: 'Antonyms',
+                shortLabel: 'Antonyms',
+                indoName: 'LAWAN KATA',
+                icon: '🔄',
+                words: [
+                    { word: 'HOT >< COLD', phonetic: '/hɒt/ - /kəʊld/', type: 'Antonym (Lawan Kata)', meaning: 'Panas >< Dingin', emoji: '🔥', level: 'EASY' },
+                    { word: 'FAST >< SLOW', phonetic: '/fɑːst/ - /sləʊ/', type: 'Antonym (Lawan Kata)', meaning: 'Cepat >< Lambat', emoji: '⚡', level: 'EASY' },
+                    { word: 'HEAVY >< LIGHT', phonetic: '/ˈhev.i/ - /laɪt/', type: 'Antonym (Lawan Kata)', meaning: 'Berat >< Ringan', emoji: '🏋️', level: 'EASY' },
+                    { word: 'EMPTY >< FULL', phonetic: '/ˈemp.ti/ - /fʊl/', type: 'Antonym (Lawan Kata)', meaning: 'Kosong >< Penuh', emoji: '🫙', level: 'MEDIUM' },
+                    { word: 'ARRIVE >< DEPART', phonetic: '/əˈraɪv/ - /dɪˈpɑːt/', type: 'Antonym (Lawan Kata)', meaning: 'Tiba >< Berangkat', emoji: '✈️', level: 'HARD' },
+                    { word: 'VICTORY >< DEFEAT', phonetic: '/ˈvɪk.tər.i/ - /dɪˈfiːt/', type: 'Antonym (Lawan Kata)', meaning: 'Kemenangan >< Kekalahan', emoji: '🏆', level: 'HARD' },
+                    { word: 'ANCIENT >< MODERN', phonetic: '/ˈeɪn.ʃənt/ - /ˈmɒd.ən/', type: 'Antonym (Lawan Kata)', meaning: 'Kuno >< Modern', emoji: '🏙️', level: 'MEDIUM' },
+                    { word: 'BRAVE >< COWARD', phonetic: '/breɪv/ - /ˈkaʊ.əd/', type: 'Antonym (Lawan Kata)', meaning: 'Berani >< Penakut', emoji: '🛡️', level: 'MEDIUM' },
+                    { word: 'DEEP >< SHALLOW', phonetic: '/diːp/ - /ˈʃæl.əʊ/', type: 'Antonym (Lawan Kata)', meaning: 'Dalam >< Dangkal', emoji: '🌊', level: 'HARD' },
+                    { word: 'CHEAP >< EXPENSIVE', phonetic: '/tʃiːp/ - /ɪkˈspen.sɪv/', type: 'Antonym (Lawan Kata)', meaning: 'Murah >< Mahal', emoji: '💎', level: 'MEDIUM' }
+                ]
+            }
+        ];
+
+        /********************************************************************
+         * 2. STATE PERMAINAN & SENSOR KAMERA
+         ********************************************************************/
+        const TOTAL_QUESTIONS = 10;
+        const TILT_THRESHOLD = 14; // Derajat kemiringan untuk memicu jawaban
+        const HOLD_DURATION_FRAMES = 22; // Berapa frame harus menahan miring (~0.4 detik)
+
+        let state = {
+            selectedCategoryId: 'animals',
+            difficulty: 'EASY', // EASY, MEDIUM, HARD
+            quizMode: 'TRUE_FALSE', // 'TRUE_FALSE' atau 'CHOICE_AB'
+            soundEnabled: true,
+
+            questions: [],
+            currentIndex: 0,
+            results: new Array(TOTAL_QUESTIONS).fill(null), // null | true | false
+            score: 0,
+            streak: 0,
+            maxStreak: 0,
+            isAnsweringLocked: false,
+
+            // Sensor Kamera & Kemiringan Kepala
+            cameraActive: false,
+            facingMode: 'user',
+            rawAngleDeg: 0,
+            calibrationOffsetDeg: 0,
+            currentTiltDeg: 0,
+            faceCenter: { x: 0.5, y: 0.52 }, // Posisi wajah ternormalisasi (0..1)
+            holdLeftCounter: 0,
+            holdRightCounter: 0,
+
+            // Partikel Konfeti
+            particles: []
+        };
+
+        // Referensi Elemen DOM
+        const videoEl = document.getElementById('cameraVideo');
+        const canvasEl = document.getElementById('arCanvas');
+        const ctx = canvasEl.getContext('2d');
+        const foreheadCardEl = document.getElementById('foreheadCard');
+        const tiltSliderEl = document.getElementById('tiltSlider');
+
+        /********************************************************************
+         * 3. WEB AUDIO API (EFEK SUARA INTERAKTIF) & TEXT-TO-SPEECH (TTS)
+         ********************************************************************/
+        let audioCtx = null;
+
+        function initAudioContext() {
+            if (!audioCtx) {
+                const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                if (AudioContextClass) {
+                    audioCtx = new AudioContextClass();
+                }
+            }
+            if (audioCtx && audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        function playSoundEffect(type) {
+            if (!state.soundEnabled) return;
+            try {
+                initAudioContext();
+                if (!audioCtx) return;
+
+                const now = audioCtx.currentTime;
+                if (type === 'correct') {
+                    // Nada ceria naik (Do - Mi - Sol - Do)
+                    const freqs = [523.25, 659.25, 783.99, 1046.5];
+                    freqs.forEach((f, idx) => {
+                        const osc = audioCtx.createOscillator();
+                        const gain = audioCtx.createGain();
+                        osc.type = 'triangle';
+                        osc.frequency.setValueAtTime(f, now + idx * 0.065);
+                        gain.gain.setValueAtTime(0.16, now + idx * 0.065);
+                        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.065 + 0.18);
+                        osc.connect(gain);
+                        gain.connect(audioCtx.destination);
+                        osc.start(now + idx * 0.065);
+                        osc.stop(now + idx * 0.065 + 0.19);
+                    });
+                } else if (type === 'wrong') {
+                    // Nada rendah buzz
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(190, now);
+                    osc.frequency.linearRampToValueAtTime(125, now + 0.3);
+                    gain.gain.setValueAtTime(0.15, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.32);
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start(now);
+                    osc.stop(now + 0.33);
+                } else if (type === 'click') {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(680, now);
+                    gain.gain.setValueAtTime(0.08, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start(now);
+                    osc.stop(now + 0.06);
+                }
+            } catch (e) {
+                // Abaikan jika browser memblokir autoplay audio
+            }
+        }
+
+        function speakEnglishText(text) {
+            if (!state.soundEnabled || !('speechSynthesis' in window)) return;
+            try {
+                window.speechSynthesis.cancel();
+                const cleanText = text.replace('><', 'opposite of');
+                const utter = new SpeechSynthesisUtterance(cleanText);
+                utter.lang = 'en-US';
+                utter.rate = 0.92;
+                utter.pitch = 1.05;
+                window.speechSynthesis.speak(utter);
+            } catch (e) {}
+        }
+
+        function speakCurrentWord() {
+            const currentQ = state.questions[state.currentIndex];
+            if (currentQ) {
+                speakEnglishText(currentQ.item.word);
+            }
+        }
+
+        function toggleAudio() {
+            state.soundEnabled = !state.soundEnabled;
+            document.getElementById('soundIcon').textContent = state.soundEnabled ? '🔊' : '🔇';
+            if (state.soundEnabled) {
+                playSoundEffect('click');
+                speakCurrentWord();
+            } else if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+            }
+        }
+
+        /********************************************************************
+         * 4. PEMBUATAN SOAL ACAK & LOGIKA KUIS KOSAKATA
+         ********************************************************************/
+        function getActiveCategory() {
+            return VOCAB_CATEGORIES.find(c => c.id === state.selectedCategoryId) || VOCAB_CATEGORIES[0];
+        }
+
+        function shuffleArray(arr) {
+            const copy = [...arr];
+            for (let i = copy.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [copy[i], copy[j]] = [copy[j], copy[i]];
+            }
+            return copy;
+        }
+
+        function buildQuestionsForRound() {
+            const cat = getActiveCategory();
+            let pool = [...cat.words];
+
+            // Utamakan tingkat kesulitan yang dipilih namun tetap genapkan 10 soal
+            const preferred = pool.filter(w => w.level === state.difficulty);
+            const others = pool.filter(w => w.level !== state.difficulty);
+            const combined = [...shuffleArray(preferred), ...shuffleArray(others)];
+            const selectedWords = combined.slice(0, TOTAL_QUESTIONS);
+
+            state.questions = selectedWords.map((item) => {
+                // Ambil pengecoh (arti kata lain di kategori yang sama)
+                const distractors = pool.filter(w => w.word !== item.word);
+                const randomDistractor = distractors[Math.floor(Math.random() * distractors.length)];
+
+                if (state.quizMode === 'TRUE_FALSE') {
+                    const isTrueStatement = Math.random() >= 0.45;
+                    const displayedMeaning = isTrueStatement ? item.meaning : randomDistractor.meaning;
+                    return {
+                        item,
+                        mode: 'TRUE_FALSE',
+                        displayedMeaning,
+                        correctSide: isTrueStatement ? 'LEFT' : 'RIGHT',
+                        leftLabel: 'BENAR',
+                        rightLabel: 'SALAH'
+                    };
+                } else {
+                    // Mode Pilihan A (Kiri) atau B (Kanan)
+                    const correctOnLeft = Math.random() >= 0.5;
+                    const leftOption = correctOnLeft ? item.meaning : randomDistractor.meaning;
+                    const rightOption = correctOnLeft ? randomDistractor.meaning : item.meaning;
+                    return {
+                        item,
+                        mode: 'CHOICE_AB',
+                        displayedMeaning: 'Pilih terjemahan yang tepat:',
+                        correctSide: correctOnLeft ? 'LEFT' : 'RIGHT',
+                        leftLabel: leftOption,
+                        rightLabel: rightOption
+                    };
+                }
+            });
+
+            state.currentIndex = 0;
+            state.results = new Array(TOTAL_QUESTIONS).fill(null);
+            state.isAnsweringLocked = false;
+            renderStorySegments();
+            renderCurrentQuestion();
+        }
+
+        function renderStorySegments() {
+            const container = document.getElementById('storySegments');
+            container.innerHTML = '';
+            for (let i = 0; i < TOTAL_QUESTIONS; i++) {
+                const bar = document.createElement('div');
+                let colorClass = 'bg-white/25';
+                if (state.results[i] === true) {
+                    colorClass = 'bg-emerald-400 shadow-[0_0_8px_#34d399]';
+                } else if (state.results[i] === false) {
+                    colorClass = 'bg-rose-500';
+                } else if (i === state.currentIndex) {
+                    colorClass = 'bg-amber-400 shadow-[0_0_10px_#fbbf24]';
+                }
+                bar.className = `h-1.5 rounded-full transition-all duration-300 ${colorClass}`;
+                container.appendChild(bar);
+            }
+        }
+
+        function renderCategoryBars() {
+            // 1. Render Bar Horizontal Atas
+            const topBar = document.getElementById('topCategoryBar');
+            topBar.innerHTML = '';
+            VOCAB_CATEGORIES.forEach(cat => {
+                const isActive = cat.id === state.selectedCategoryId;
+                const btn = document.createElement('button');
+                btn.onclick = () => selectCategory(cat.id);
+                btn.className = isActive
+                    ? 'topic-pill-active rounded-full px-3.5 py-1.5 text-xs flex items-center gap-1.5 shrink-0 transition'
+                    : 'glass-dark text-slate-200 hover:text-white rounded-full px-3.5 py-1.5 text-xs font-bold flex items-center gap-1.5 shrink-0 transition';
+                btn.innerHTML = `<span>${cat.icon}</span><span>${cat.shortLabel}</span>`;
+                topBar.appendChild(btn);
+            });
+
+            // 2. Render Grid di dalam Modal Pilih Topik
+            const modalGrid = document.getElementById('modalTopicGrid');
+            modalGrid.innerHTML = '';
+            VOCAB_CATEGORIES.forEach(cat => {
+                const isSelected = cat.id === state.selectedCategoryId;
+                const btn = document.createElement('button');
+                btn.onclick = () => selectCategory(cat.id);
+                btn.className = `modal-topic-item ${isSelected ? 'selected' : ''} rounded-2xl py-3 px-3.5 flex items-center gap-2.5 text-white font-extrabold text-[13px]`;
+                btn.innerHTML = `
+                    <span class="text-base">${cat.icon}</span>
+                    <span class="truncate">${cat.name}</span>
+                `;
+                modalGrid.appendChild(btn);
+            });
+        }
+
+        function selectCategory(catId) {
+            playSoundEffect('click');
+            state.selectedCategoryId = catId;
+            renderCategoryBars();
+            buildQuestionsForRound();
+
+            const cat = getActiveCategory();
+            showToast(`Topik <span class="text-cyan-300">${cat.indoName}</span> siap! Soal telah diacak, miringkan kepala Kiri/Kanan!`);
+        }
+
+        function setDifficulty(level) {
+            playSoundEffect('click');
+            state.difficulty = level;
+            const levels = ['EASY', 'MEDIUM', 'HARD'];
+            levels.forEach(l => {
+                const btn = document.getElementById('diffBtn' + l.charAt(0) + l.slice(1).toLowerCase());
+                if (l === level) {
+                    btn.className = 'px-2.5 py-1 rounded-lg bg-emerald-500 text-slate-950 font-extrabold transition';
+                } else {
+                    btn.className = 'px-2.5 py-1 rounded-lg text-slate-300 hover:text-white transition';
+                }
+            });
+            buildQuestionsForRound();
+        }
+
+        function toggleQuizMode() {
+            playSoundEffect('click');
+            state.quizMode = state.quizMode === 'TRUE_FALSE' ? 'CHOICE_AB' : 'TRUE_FALSE';
+            const modeBtn = document.getElementById('quizModeBtn');
+            modeBtn.textContent = state.quizMode === 'TRUE_FALSE' ? 'Mode: ✅ Benar/Salah' : 'Mode: 🔤 Pilihan A/B';
+            buildQuestionsForRound();
+        }
+
+        function renderCurrentQuestion() {
+            const q = state.questions[state.currentIndex];
+            if (!q) return;
+
+            const cat = getActiveCategory();
+            document.getElementById('cardTopicBadge').textContent = `${cat.shortLabel.toUpperCase()} • ${q.item.level}`;
+            document.getElementById('cardQuestionNum').textContent = `${state.currentIndex + 1}/${TOTAL_QUESTIONS}`;
+
+            document.getElementById('vocabEmoji').textContent = q.item.emoji;
+            document.getElementById('vocabWord').textContent = q.item.word;
+            document.getElementById('vocabPhonetic').textContent = `${q.item.phonetic} • ${q.item.type}`;
+
+            if (q.mode === 'TRUE_FALSE') {
+                document.getElementById('questionModeLabel').textContent = 'Apakah artinya dalam Bahasa Indonesia:';
+                document.getElementById('questionMeaningText').textContent = `"${q.displayedMeaning}" ?`;
+
+                document.getElementById('leftChoiceIcon').textContent = '✅';
+                document.getElementById('leftChoiceText').textContent = 'BENAR';
+                document.getElementById('rightChoiceIcon').textContent = '❌';
+                document.getElementById('rightChoiceText').textContent = 'SALAH';
+
+                document.getElementById('leftHintLabel').textContent = '⬅️ Kiri: BENAR';
+                document.getElementById('rightHintLabel').textContent = 'Kanan: SALAH ➡️';
+            } else {
+                document.getElementById('questionModeLabel').textContent = 'Miringkan kepala ke arti yang benar:';
+                document.getElementById('questionMeaningText').textContent = `${q.leftLabel}  atau  ${q.rightLabel}`;
+
+                document.getElementById('leftChoiceIcon').textContent = '⬅️';
+                document.getElementById('leftChoiceText').textContent = q.leftLabel;
+                document.getElementById('rightChoiceIcon').textContent = '➡️';
+                document.getElementById('rightChoiceText').textContent = q.rightLabel;
+
+                document.getElementById('leftHintLabel').textContent = '⬅️ Pilihan Kiri';
+                document.getElementById('rightHintLabel').textContent = 'Pilihan Kanan ➡️';
+            }
+
+            // Bacakan kata Bahasa Inggris jika modal topik sedang tertutup
+            const modalOpen = !document.getElementById('topicModalOverlay').classList.contains('hidden');
+            if (!modalOpen) {
+                setTimeout(() => speakCurrentWord(), 250);
+            }
+        }
+
+        function submitAnswer(chosenSide) {
+            if (state.isAnsweringLocked) return;
+            const q = state.questions[state.currentIndex];
+            if (!q) return;
+
+            state.isAnsweringLocked = true;
+            state.holdLeftCounter = 0;
+            state.holdRightCounter = 0;
+            updateHoldBars(0, 0);
+
+            const isCorrect = (chosenSide === q.correctSide);
+            state.results[state.currentIndex] = isCorrect;
+
+            const feedbackBanner = document.getElementById('answerFeedbackBanner');
+            feedbackBanner.classList.remove('hidden');
+
+            if (isCorrect) {
+                state.streak += 1;
+                if (state.streak > state.maxStreak) state.maxStreak = state.streak;
+                state.score += 10 + (state.streak > 1 ? 5 : 0);
+
+                playSoundEffect('correct');
+                spawnConfettiParticles();
+
+                feedbackBanner.className = 'mt-3 px-4 py-2 rounded-2xl font-extrabold text-xs sm:text-sm text-center shadow-2xl border bg-emerald-500/90 border-emerald-300 text-slate-950 backdrop-blur-md transition-all';
+                feedbackBanner.innerHTML = `🎉 Tepat Sekali! <strong>${q.item.word}</strong> artinya <strong>"${q.item.meaning}"</strong>`;
+            } else {
+                state.streak = 0;
+                playSoundEffect('wrong');
+                foreheadCardEl.classList.add('shake-anim');
+                setTimeout(() => foreheadCardEl.classList.remove('shake-anim'), 500);
+
+                feedbackBanner.className = 'mt-3 px-4 py-2 rounded-2xl font-extrabold text-xs sm:text-sm text-center shadow-2xl border bg-rose-600/90 border-rose-300 text-white backdrop-blur-md transition-all';
+                feedbackBanner.innerHTML = `💡 Kurang Tepat! <strong>${q.item.word}</strong> artinya <strong>"${q.item.meaning}"</strong>`;
+            }
+
+            // Update Skor & Streak di Header
+            document.getElementById('scoreDisplay').textContent = state.score;
+            document.getElementById('streakDisplay').textContent = state.streak;
+            renderStorySegments();
+
+            // Reset slider simulasi ke tengah
+            tiltSliderEl.value = 0;
+            if (!state.cameraActive) {
+                state.rawAngleDeg = 0;
+            }
+
+            // Lanjut ke soal berikutnya setelah 1.35 detik
+            setTimeout(() => {
+                feedbackBanner.classList.add('hidden');
+                if (state.currentIndex < TOTAL_QUESTIONS - 1) {
+                    state.currentIndex += 1;
+                    state.isAnsweringLocked = false;
+                    renderStorySegments();
+                    renderCurrentQuestion();
+                } else {
+                    showFinalResultsModal();
+                }
+            }, 1350);
+        }
+
+        function skipCurrentQuestion() {
+            if (state.isAnsweringLocked) return;
+            playSoundEffect('click');
+            state.results[state.currentIndex] = false;
+            state.streak = 0;
+            document.getElementById('streakDisplay').textContent = '0';
+
+            if (state.currentIndex < TOTAL_QUESTIONS - 1) {
+                state.currentIndex += 1;
+                renderStorySegments();
+                renderCurrentQuestion();
+                showToast('⏭️ Soal dilewati! Miringkan kepala Kiri/Kanan untuk soal baru.');
+            } else {
+                renderStorySegments();
+                showFinalResultsModal();
+            }
+        }
+
+        function showFinalResultsModal() {
+            const correctCount = state.results.filter(r => r === true).length;
+            document.getElementById('finalScoreText').textContent = `⭐ ${state.score}`;
+            document.getElementById('finalAccuracyText').textContent = `${correctCount}/${TOTAL_QUESTIONS}`;
+            document.getElementById('finalStreakText').textContent = `🔥 ${state.maxStreak}`;
+
+            const listEl = document.getElementById('learnedWordsList');
+            listEl.innerHTML = '';
+            state.questions.forEach((q, idx) => {
+                const wasRight = state.results[idx] === true;
+                const row = document.createElement('div');
+                row.className = 'flex items-center justify-between bg-slate-800/75 border border-white/10 rounded-xl px-3 py-2 text-xs';
+                row.innerHTML = `
+                    <div class="flex items-center gap-2">
+                        <span class="text-base">${q.item.emoji}</span>
+                        <div class="text-left">
+                            <div class="font-extrabold text-white">${q.item.word} <span class="text-[10px] text-slate-400 font-normal">${q.item.phonetic}</span></div>
+                            <div class="text-[11px] text-cyan-300 font-semibold">${q.item.meaning}</div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span>${wasRight ? '✅' : '❌'}</span>
+                        <button onclick="speakEnglishText('${q.item.word}')" class="bg-slate-700 hover:bg-slate-600 w-7 h-7 rounded-full flex items-center justify-center">🔊</button>
+                    </div>
+                `;
+                listEl.appendChild(row);
+            });
+
+            document.getElementById('resultModalOverlay').classList.remove('hidden');
+        }
+
+        function restartRound() {
+            playSoundEffect('click');
+            document.getElementById('resultModalOverlay').classList.add('hidden');
+            buildQuestionsForRound();
+        }
+
+        function openTopicModalFromResult() {
+            playSoundEffect('click');
+            document.getElementById('resultModalOverlay').classList.add('hidden');
+            openTopicModal();
+        }
+
+        /********************************************************************
+         * 5. MODAL, TOAST, & KALIBRASI SUDUT KEPALA
+         ********************************************************************/
+        function openTopicModal() {
+            playSoundEffect('click');
+            document.getElementById('topicModalOverlay').classList.remove('hidden');
+        }
+
+        function closeTopicModal() {
+            playSoundEffect('click');
+            document.getElementById('topicModalOverlay').classList.add('hidden');
+            speakCurrentWord();
+        }
+
+        async function startWithCameraAndCloseModal() {
+            playSoundEffect('click');
+            document.getElementById('btnStartCameraLabel').textContent = 'Menghubungkan Kamera...';
+            await initCameraAndFaceMesh();
+            document.getElementById('btnStartCameraLabel').textContent = 'Mulai Kuis & Aktifkan Kamera';
+            closeTopicModal();
+        }
+
+        function showToast(htmlMessage) {
+            const toastEl = document.getElementById('floatingToast');
+            const textEl = document.getElementById('toastText');
+            textEl.innerHTML = htmlMessage;
+            toastEl.classList.remove('scale-95', 'opacity-80');
+            toastEl.classList.add('scale-100', 'opacity-100');
+        }
+
+        function calibrateZeroAngle() {
+            playSoundEffect('click');
+            state.calibrationOffsetDeg = state.rawAngleDeg;
+            tiltSliderEl.value = 0;
+            showToast('⚖️ Sudut kepala berhasil dikalibrasi ke <strong>0° Lurus</strong>!');
+        }
+
+        function handleShutterClick() {
+            playSoundEffect('click');
+            const modalOverlay = document.getElementById('topicModalOverlay');
+            if (!modalOverlay.classList.contains('hidden')) {
+                startWithCameraAndCloseModal();
+            } else {
+                speakCurrentWord();
+                showToast(`🗣️ Pelafalan: <strong>${state.questions[state.currentIndex]?.item.word}</strong> (${state.questions[state.currentIndex]?.item.phonetic})`);
+            }
+        }
+
+        /********************************************************************
+         * 6. WEBRTC CAMERA & MEDIAPIPE FACE MESH (DETEKSI HEAD-TILT)
+         ********************************************************************/
+        let faceMeshInstance = null;
+        let isProcessingFrame = false;
+
+        function setCameraStatusUI(statusType, message) {
+            const dot = document.getElementById('camStatusDot');
+            const text = document.getElementById('camStatusText');
+            text.textContent = message;
+
+            if (statusType === 'active') {
+                dot.className = 'w-2 h-2 rounded-full bg-emerald-400 inline-block shadow-[0_0_8px_#34d399]';
+            } else if (statusType === 'sim') {
+                dot.className = 'w-2 h-2 rounded-full bg-cyan-400 inline-block';
+            } else {
+                dot.className = 'w-2 h-2 rounded-full bg-amber-400 inline-block animate-pulse';
+            }
+        }
+
+        async function initCameraAndFaceMesh() {
+            setCameraStatusUI('loading', 'Meminta izin kamera...');
+
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                setCameraStatusUI('sim', 'Mode Simulasi AR');
+                return;
+            }
+
+            try {
+                // Hentikan stream lama jika ada
+                if (videoEl.srcObject) {
+                    videoEl.srcObject.getTracks().forEach(t => t.stop());
+                }
+
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: state.facingMode,
+                        width: { ideal: 640 },
+                        height: { ideal: 480 }
+                    },
+                    audio: false
+                });
+
+                videoEl.srcObject = stream;
+                await videoEl.play();
+                videoEl.classList.remove('hidden');
+
+                if (state.facingMode === 'user') {
+                    videoEl.classList.add('mirror-video');
+                } else {
+                    videoEl.classList.remove('mirror-video');
+                }
+
+                state.cameraActive = true;
+                setCameraStatusUI('active', 'Kamera AR Aktif');
+
+                // Inisialisasi MediaPipe FaceMesh jika tersedia dari CDN
+                if (typeof FaceMesh !== 'undefined' && !faceMeshInstance) {
+                    faceMeshInstance = new FaceMesh({
+                        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+                    });
+                    faceMeshInstance.setOptions({
+                        maxNumFaces: 1,
+                        refineLandmarks: false,
+                        minDetectionConfidence: 0.5,
+                        minTrackingConfidence: 0.5
+                    });
+                    faceMeshInstance.onResults(onFaceMeshResults);
+                }
+
+                processVideoFrameLoop();
+            } catch (err) {
+                state.cameraActive = false;
+                videoEl.classList.add('hidden');
+                setCameraStatusUI('sim', 'Mode Simulasi Aktif');
+                showToast('💡 Kamera tidak diizinkan/tersedia. Gunakan <strong>Slider / Tombol Kiri-Kanan</strong>!');
+            }
+        }
+
+        async function switchCameraFacing() {
+            playSoundEffect('click');
+            state.facingMode = state.facingMode === 'user' ? 'environment' : 'user';
+            await initCameraAndFaceMesh();
+        }
+
+        async function processVideoFrameLoop() {
+            if (!state.cameraActive) return;
+            if (faceMeshInstance && videoEl.readyState >= 2 && !isProcessingFrame) {
+                isProcessingFrame = true;
+                try {
+                    await faceMeshInstance.send({ image: videoEl });
+                } catch (e) {}
+                isProcessingFrame = false;
+            }
+            requestAnimationFrame(processVideoFrameLoop);
+        }
+
+        function onFaceMeshResults(results) {
+            if (!results.multiFaceLandmarks || results.multiFaceLandmarks.length === 0) {
+                return;
+            }
+            const landmarks = results.multiFaceLandmarks[0];
+            // Landmark 33 (sudut mata kanan pengguna) & 263 (sudut mata kiri pengguna)
+            const leftEye = landmarks[33];
+            const rightEye = landmarks[263];
+            const forehead = landmarks[10];
+
+            if (leftEye && rightEye) {
+                const dy = rightEye.y - leftEye.y;
+                const dx = rightEye.x - leftEye.x;
+                let angleRad = Math.atan2(dy, dx);
+                let angleDeg = angleRad * (180 / Math.PI);
+
+                // Karena kamera depan di-mirror (scaleX(-1)), miring ke kiri di layar memiliki tanda terbalik
+                if (state.facingMode === 'user') {
+                    angleDeg = -angleDeg;
+                }
+
+                // Haluskan nilai sudut (Low-pass filter)
+                state.rawAngleDeg = state.rawAngleDeg * 0.65 + angleDeg * 0.35;
+            }
+
+            if (forehead) {
+                const mirroredX = state.facingMode === 'user' ? (1 - forehead.x) : forehead.x;
+                state.faceCenter.x = state.faceCenter.x * 0.7 + mirroredX * 0.3;
+                state.faceCenter.y = state.faceCenter.y * 0.7 + forehead.y * 0.3;
+            }
+        }
+
+        /********************************************************************
+         * 7. KONTROL INTERAKTIF (SLIDER & KEYBOARD FALLBACK)
+         ********************************************************************/
+        tiltSliderEl.addEventListener('input', (e) => {
+            state.rawAngleDeg = parseFloat(e.target.value);
+            state.calibrationOffsetDeg = 0;
+        });
+
+        tiltSliderEl.addEventListener('change', () => {
+            // Kembalikan ke 0 saat dilepas
+            tiltSliderEl.value = 0;
+            if (!state.cameraActive) {
+                state.rawAngleDeg = 0;
+            }
+        });
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft') {
+                state.rawAngleDeg = -22;
+                tiltSliderEl.value = -22;
+            } else if (e.key === 'ArrowRight') {
+                state.rawAngleDeg = 22;
+                tiltSliderEl.value = 22;
+            } else if (e.key === ' ') {
+                speakCurrentWord();
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+                state.rawAngleDeg = 0;
+                tiltSliderEl.value = 0;
+            }
+        });
+
+        /********************************************************************
+         * 8. LOOP ANIMASI UTAMA (AVATAR AR, SUDUT KARTU DAHI, & KONFETI)
+         ********************************************************************/
+        function resizeCanvas() {
+            const rect = canvasEl.parentElement.getBoundingClientRect();
+            canvasEl.width = rect.width;
+            canvasEl.height = rect.height;
+        }
+        window.addEventListener('resize', resizeCanvas);
+
+        function spawnConfettiParticles() {
+            const colors = ['#34d399', '#fbbf24', '#38bdf8', '#f472b6', '#a78bfa'];
+            for (let i = 0; i < 38; i++) {
+                state.particles.push({
+                    x: canvasEl.width / 2,
+                    y: canvasEl.height * 0.32,
+                    vx: (Math.random() - 0.5) * 10,
+                    vy: (Math.random() - 0.8) * 9,
+                    size: Math.random() * 7 + 4,
+                    color: colors[Math.floor(Math.random() * colors.length)],
+                    life: 1.0
+                });
+            }
+        }
+
+        function updateHoldBars(leftPct, rightPct) {
+            document.getElementById('leftHoldBar').style.width = `${leftPct}%`;
+            document.getElementById('rightHoldBar').style.width = `${rightPct}%`;
+
+            const btnLeft = document.getElementById('btnLeftChoice');
+            const btnRight = document.getElementById('btnRightChoice');
+
+            if (leftPct > 5) {
+                btnLeft.classList.add('active-tilt');
+            } else {
+                btnLeft.classList.remove('active-tilt');
+            }
+
+            if (rightPct > 5) {
+                btnRight.classList.add('active-tilt');
+            } else {
+                btnRight.classList.remove('active-tilt');
+            }
+        }
+
+        function drawSimulatedAvatarAndHUD() {
+            ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+
+            const cx = canvasEl.width * 0.5;
+            const cy = canvasEl.height * 0.56;
+            const tiltRad = (state.currentTiltDeg * Math.PI) / 180;
+
+            // Jika kamera tidak aktif, gambar siluet wajah interaktif AR yang ikut miring
+            if (!state.cameraActive) {
+                ctx.save();
+                ctx.translate(cx, cy);
+                ctx.rotate(tiltRad);
+
+                // Lingkaran Glow Neon Belakang Kepala
+                const grad = ctx.createRadialGradient(0, 0, 20, 0, 0, 135);
+                grad.addColorStop(0, 'rgba(56, 189, 248, 0.22)');
+                grad.addColorStop(1, 'rgba(16, 185, 129, 0)');
+                ctx.fillStyle = grad;
+                ctx.beginPath();
+                ctx.arc(0, 0, 135, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Bentuk Wajah Avatar
+                ctx.fillStyle = 'rgba(30, 41, 69, 0.85)';
+                ctx.strokeStyle = 'rgba(56, 189, 248, 0.55)';
+                ctx.lineWidth = 2.5;
+                ctx.beginPath();
+                ctx.ellipse(0, 0, 68, 84, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+
+                // Kacamata AR Futuristik
+                ctx.fillStyle = 'rgba(0, 229, 255, 0.25)';
+                ctx.strokeStyle = '#00e5ff';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.roundRect(-50, -22, 42, 24, 8);
+                ctx.roundRect(8, -22, 42, 24, 8);
+                ctx.fill();
+                ctx.stroke();
+
+                // Garis Penghubung Kacamata
+                ctx.beginPath();
+                ctx.moveTo(-8, -10);
+                ctx.lineTo(8, -10);
+                ctx.stroke();
+
+                // Mata
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(-29, -10, 5, 0, Math.PI * 2);
+                ctx.arc(29, -10, 5, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Senyum
+                ctx.strokeStyle = '#34d399';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(0, 18, 22, 0.15 * Math.PI, 0.85 * Math.PI);
+                ctx.stroke();
+
+                ctx.restore();
+            } else {
+                // Jika kamera aktif, gambar bingkai pelacak wajah AR halus
+                const fx = state.faceCenter.x * canvasEl.width;
+                const fy = (state.faceCenter.y + 0.08) * canvasEl.height;
+                ctx.save();
+                ctx.translate(fx, fy);
+                ctx.rotate(tiltRad);
+                ctx.strokeStyle = 'rgba(0, 229, 255, 0.45)';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([8, 6]);
+                ctx.beginPath();
+                ctx.ellipse(0, 0, 78, 98, 0, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            // Render Partikel Konfeti
+            for (let i = state.particles.length - 1; i >= 0; i--) {
+                const p = state.particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vy += 0.28; // Gravitasi
+                p.life -= 0.02;
+
+                if (p.life <= 0) {
+                    state.particles.splice(i, 1);
+                    continue;
+                }
+
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, p.life);
+                ctx.fillStyle = p.color;
+                ctx.fillRect(p.x, p.y, p.size, p.size);
+                ctx.restore();
+            }
+        }
+
+        function mainAnimationLoop() {
+            // Hitung sudut kemiringan bersih setelah kalibrasi
+            const netAngle = Math.max(-35, Math.min(35, state.rawAngleDeg - state.calibrationOffsetDeg));
+            state.currentTiltDeg = state.currentTiltDeg * 0.75 + netAngle * 0.25;
+
+            const roundedDeg = Math.round(state.currentTiltDeg);
+            const tiltBadge = document.getElementById('tiltAngleBadge');
+
+            // Putar Kartu Soal di Dahi secara mulus mengikuti kepala
+            const clampedCardRotate = Math.max(-18, Math.min(18, state.currentTiltDeg * 0.65));
+            const translateX = state.currentTiltDeg * 1.1;
+            foreheadCardEl.style.transform = `translateX(${translateX}px) rotate(${clampedCardRotate}deg)`;
+
+            // Cek Apakah Modal Sedang Terbuka
+            const isTopicModalOpen = !document.getElementById('topicModalOverlay').classList.contains('hidden');
+            const isResultModalOpen = !document.getElementById('resultModalOverlay').classList.contains('hidden');
+
+            if (roundedDeg < -TILT_THRESHOLD) {
+                tiltBadge.textContent = `${roundedDeg}° Miring Kiri`;
+                tiltBadge.className = 'bg-emerald-500 text-slate-950 px-2 py-0.5 rounded-full text-[10px] font-extrabold';
+                foreheadCardEl.style.borderColor = '#10b981';
+
+                if (!state.isAnsweringLocked && !isTopicModalOpen && !isResultModalOpen) {
+                    state.holdLeftCounter += 1;
+                    state.holdRightCounter = 0;
+                    const pct = Math.min(100, (state.holdLeftCounter / HOLD_DURATION_FRAMES) * 100);
+                    updateHoldBars(pct, 0);
+                    if (state.holdLeftCounter >= HOLD_DURATION_FRAMES) {
+                        submitAnswer('LEFT');
+                    }
+                }
+            } else if (roundedDeg > TILT_THRESHOLD) {
+                tiltBadge.textContent = `+${roundedDeg}° Miring Kanan`;
+                tiltBadge.className = 'bg-rose-500 text-white px-2 py-0.5 rounded-full text-[10px] font-extrabold';
+                foreheadCardEl.style.borderColor = '#f43f5e';
+
+                if (!state.isAnsweringLocked && !isTopicModalOpen && !isResultModalOpen) {
+                    state.holdRightCounter += 1;
+                    state.holdLeftCounter = 0;
+                    const pct = Math.min(100, (state.holdRightCounter / HOLD_DURATION_FRAMES) * 100);
+                    updateHoldBars(0, pct);
+                    if (state.holdRightCounter >= HOLD_DURATION_FRAMES) {
+                        submitAnswer('RIGHT');
+                    }
+                }
+            } else {
+                tiltBadge.textContent = `${roundedDeg}° Lurus`;
+                tiltBadge.className = 'bg-slate-900 text-white px-2 py-0.5 rounded-full text-[10px] font-extrabold';
+                foreheadCardEl.style.borderColor = '#f59e0b';
+                state.holdLeftCounter = Math.max(0, state.holdLeftCounter - 2);
+                state.holdRightCounter = Math.max(0, state.holdRightCounter - 2);
+                updateHoldBars(
+                    (state.holdLeftCounter / HOLD_DURATION_FRAMES) * 100,
+                    (state.holdRightCounter / HOLD_DURATION_FRAMES) * 100
+                );
+            }
+
+            drawSimulatedAvatarAndHUD();
+            requestAnimationFrame(mainAnimationLoop);
+        }
+
+        /********************************************************************
+         * 9. INISIALISASI SAAT HALAMAN DIMUAT
+         ********************************************************************/
+        window.onload = function () {
+            resizeCanvas();
+            renderCategoryBars();
+            buildQuestionsForRound();
+            mainAnimationLoop();
+            // Mencoba inisialisasi kamera otomatis di latar belakang seperti filter AR
+            initCameraAndFaceMesh();
+        };
+    </script>
+</body>
+</html>
